@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
-
+os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
 st.set_page_config(
     page_title="Smart Credit Card Advisor",
     page_icon="💳",
