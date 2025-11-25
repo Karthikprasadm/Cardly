@@ -10,6 +10,7 @@ This guide walks through everything you need to run the Smart Credit Card Adviso
 - **pip** and **git**
 - **Hugging Face account** with an access token (read or inference scope)
 - Recommended: **virtual environment** tooling (`venv`, `conda`, etc.)
+- Optional: **Bank statements** in CSV or OFX format (OFX support is powered by the bundled `ofxparse` dependency)
 
 ---
 
@@ -79,8 +80,9 @@ streamlit run app.py
    - Shows whether your Hugging Face token was detected.  
    - If you see a warning, double-check the `.env` file or restart the session.
 
-2. **Preferences & Spend Inputs**  
-   - Monthly income, spend sliders (dining, groceries, shopping, travel, fuel), preferred features, and financial constraints feed the hybrid embedding pipeline.
+2. **Upload or Declare Spend**  
+   - Use the **“Upload Spend Data”** panel to drop in CSV/OFX statements. Cardly auto-detects dates, merchants, amounts, and categories, then computes a 3–6 month rolling average plus seasonal spikes.  
+   - When no file is uploaded, the original sliders remain active. The UI clearly states which source is currently powering the profile.
 
 3. **User Query Box**  
    - Describe your goals in natural language (“I travel twice a year, want lounge access, avoid high annual fees”).
@@ -89,8 +91,14 @@ streamlit run app.py
    - Click the CTA button; Cardly embeds your text + numeric profile, compares it with the stored embeddings, and ranks the top 5 cards.
 
 5. **Results Section**  
-   - Each expander shows issuer, annual fee, interest rate, reward descriptions, and key features.  
+   - Each expander shows issuer, annual fee, interest rate, reward descriptions, key features, and the newly computed **net annual value** based on your spend profile.  
    - The app calls the Zephyr-7B LLM (via Hugging Face Inference) to craft personalized “Why this card?” insights.
+   - Use the **📌 Pin for comparison** button on any card to send it to the comparison board (max 3 cards). Remove pins or clear the board from the section below the recommendations.
+
+6. **Net Annual Value Chart & Comparison Board**  
+   - After recommendations load you’ll see a bar chart ranking cards by **net annual value (rewards − annual fees)** under the current or simulated scenario.  
+   - The comparison board displays pinned cards side-by-side so you can contrast fees, rewards, interest rates, and key features.
+
 
 ---
 

@@ -20,6 +20,9 @@ The system uses a hybrid embedding approach (text + numeric features) to find th
 - LLM-powered explanations for each recommended card
 - Interactive Streamlit UI for easy user interaction
 - Deployed on Streamlit Cloud with Hugging Face integration
+- Transaction upload (CSV/OFX) to auto-build spend profiles with seasonal weighting
+- Card comparison board to pin up to three cards and review them side-by-side
+- Net annual value projection with what-if travel scenarios
 
 ---
 
@@ -78,7 +81,7 @@ creditCardRecommendationSystem/
      ```
      HF_TOKEN=your_huggingface_token_here
      ```
-   - Never push the `.env` file or your token to GitHub. Use `git status` to verify it’s untracked.
+   - Never push the `.env` file or your token/credentials to GitHub. Use `git status` to verify it’s untracked.
 
 5. **Run the Streamlit app**
    ```bash
@@ -95,6 +98,9 @@ For a detailed walkthrough (including screenshots, troubleshooting tips, and how
 
 - Enter your financial profile and preferences in the UI.
 - Get personalized credit card recommendations with detailed explanations.
+- Upload recent statements to let Cardly auto-categorize your spending (the sliders become fallbacks).
+- Pin recommended cards to compare annual fees, rewards, and perks.
+- Use the “What-if scenario” toggle to simulate travel-heavy months and review the net annual value bar chart to see how each card stacks up.
 
 ---
 
