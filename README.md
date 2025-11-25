@@ -1,15 +1,15 @@
 
 ---
 
-# Credit Card Recommendation System
+# Cardly – Smart Credit Card Advisor
 
-This project is a web-based, AI-powered credit card recommendation system that leverages machine learning and large language models (LLMs) to provide personalized credit card suggestions based on user financial profiles and preferences.
+Cardly is a web-based, AI-powered credit card recommendation system that combines traditional machine learning with large language models (LLMs) to provide personalized credit card suggestions based on a user’s financial profile and stated preferences.
 
 ---
 
 ## Project Overview
 
-The system uses a hybrid embedding approach combining text and numerical features of credit cards to find the best matches for users. It integrates a Streamlit frontend with a Hugging Face LLM backend to generate personalized insights and reward simulations.
+The system uses a hybrid embedding approach (text + numeric features) to find the best-matching cards for any user profile. A Streamlit frontend handles the user interaction layer, while a Hugging Face Zephyr LLM produces concise explanations for every recommendation.
 
 ---
 
@@ -43,49 +43,51 @@ creditCardRecommendationSystem/
 
 ## Live Demo & Repository
 
-- **Video link:** [(https://vimeo.com/1094748093/63f14e9da2?share=copy)](https://vimeo.com/1094748093/63f14e9da2?share=copy)
+- **Video link:** [https://vimeo.com/1094748093/63f14e9da2?share=copy](https://vimeo.com/1094748093/63f14e9da2?share=copy)
 - **Live App:** [https://creditcardrecommendationsystem-project.streamlit.app/](https://creditcardrecommendationsystem-project.streamlit.app/)
-- **GitHub:** [https://github.com/alpha2lucifer/creditCardRecommendationSystem](https://github.com/alpha2lucifer/creditCardRecommendationSystem)
+- **GitHub (current repo):** [https://github.com/Karthikprasadm/Cardly](https://github.com/Karthikprasadm/Cardly)
 <div align="center">
   <img src="Untitled video - Made with Clipchamp (7).gif" height="500" />
 </div>
 ---
 
-## Setup Instructions
+## Quick Setup
 
-1. **Clone the repository:**
-    ```bash
-    git clone https://github.com/alpha2lucifer/creditCardRecommendationSystem.git
-    ```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Karthikprasadm/Cardly.git
+   cd Cardly
+   ```
 
-2. **Navigate to the project directory:**
-    ```bash
-    cd creditCardRecommendationSystem
-    ```
+2. **(Recommended) Create and activate a virtual environment**
+   ```bash
+   python -m venv .venv
+   # Windows
+   .venv\Scripts\activate
+   # macOS/Linux
+   source .venv/bin/activate
+   ```
 
-3. **(Optional) Create and activate a virtual environment:**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-4. **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+4. **Configure secrets**
+   - Create a `.env` file (not committed to git) containing:
+     ```
+     HF_TOKEN=your_huggingface_token_here
+     ```
+   - Never push the `.env` file or your token to GitHub. Use `git status` to verify it’s untracked.
 
-5. **Set up Hugging Face API token:**
-    - Create a `.env` file in the root directory and add:
-      ```
-      HF_TOKEN=your_huggingface_token_here
-      ```
+5. **Run the Streamlit app**
+   ```bash
+   streamlit run app.py
+   ```
 
-6. **Run the Streamlit app:**
-    ```bash
-    streamlit run app.py
-    ```
+6. **Open** `http://localhost:8501` **and start exploring recommendations.**
 
-7. **Open your browser and go to** `http://localhost:8501` **to use the app.**
+For a detailed walkthrough (including screenshots, troubleshooting tips, and how to interpret the outputs) see [`how_to_run&use.md`](how_to_run&use.md).
 
 ---
 
