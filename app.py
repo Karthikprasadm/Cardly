@@ -1,11 +1,50 @@
 import os
+import sys
+import types
 import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
+import torch
+import huggingface_hub
+from huggingface_hub import hf_hub_download
 from sklearn.metrics.pairwise import cosine_similarity
-from langchain_huggingface import HuggingFaceEndpoint
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+from langchain_core.messages import HumanMessage
 from dotenv import load_dotenv
+
+# Backward compatibility for saved SentenceTransformer artifacts
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = hf_hub_download
+
+if "sentence_transformers.model_card" not in sys.modules:
+    model_card_module = types.ModuleType("sentence_transformers.model_card")
+
+    class SentenceTransformerModelCardData(dict):
+        """Minimal data holder for legacy SentenceTransformer model cards."""
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.__dict__ = self
+
+        def to_json(self):
+            return dict(self)
+
+    class SentenceTransformerModelCard(dict):
+        """Stub model card keeping parity with early sentence-transformers."""
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.__dict__ = self
+
+        def to_json(self):
+            return dict(self)
+
+    model_card_module.SentenceTransformerModelCardData = SentenceTransformerModelCardData
+    model_card_module.SentenceTransformerModelCard = SentenceTransformerModelCard
+    sys.modules["sentence_transformers.model_card"] = model_card_module
+
+from sentence_transformers import SentenceTransformer
 
 # Load environment variables
 load_dotenv()
@@ -20,20 +59,72 @@ st.set_page_config(
 
 @st.cache_resource(show_spinner=False)
 def load_resources():
-    embedder = joblib.load('model/credit_card_embedder.joblib')
-    scaler = joblib.load('model/credit_card_scaler.joblib')
-    card_vectors = np.load('model/credit_card_hybrid_embeddings.npy')
-    df = pd.read_csv('model/credit_card_data_final.csv')
+    try:
+        embedder = joblib.load('model/credit_card_embedder.joblib')
+    except Exception as exc:
+        st.warning(
+            "Fallback to all-MiniLM-L6-v2 embedder "
+            f"(joblib artifact missing or incompatible: {exc})"
+        )
+        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+
+    # Ensure older pickled models have the expected device attribute
+    if not hasattr(embedder, "_target_device"):
+        target_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        embedder._target_device = target_device
+        embedder.to(target_device)
+
+    # Patch missing config attributes for legacy transformer configs
+    transformer_module = None
+    try:
+        transformer_module = embedder[0]
+    except Exception:
+        transformer_module = None
+
+    if transformer_module and hasattr(transformer_module, "auto_model"):
+        config = transformer_module.auto_model.config
+        for attr, default in {
+            "output_attentions": False,
+            "output_hidden_states": False,
+            "return_dict": False,
+        }.items():
+            if not hasattr(config, attr):
+                setattr(config, attr, default)
+            private_attr = f"_{attr}"
+            if not hasattr(config, private_attr):
+                setattr(config, private_attr, default)
+
+    try:
+        scaler = joblib.load('model/credit_card_scaler.joblib')
+    except Exception as exc:
+        st.error(f"Failed to load scaler: {exc}")
+        st.stop()
+
+    try:
+        card_vectors = np.load('model/credit_card_hybrid_embeddings.npy')
+    except Exception as exc:
+        st.error(f"Failed to load card embeddings: {exc}")
+        st.stop()
+
+    try:
+        df = pd.read_csv('model/credit_card_data_final.csv')
+    except Exception as exc:
+        st.error(f"Failed to load card dataset: {exc}")
+        st.stop()
+
     return embedder, scaler, card_vectors, df
 
 embedder, scaler, card_vectors, df = load_resources()
 
 # LLM setup
-llm = HuggingFaceEndpoint(
-    repo_id="HuggingFaceH4/zephyr-7b-beta",
-    temperature=0.3,
-    max_new_tokens=256,
-    huggingfacehub_api_token=HF_TOKEN
+chat_llm = ChatHuggingFace(
+    llm=HuggingFaceEndpoint(
+        repo_id="HuggingFaceH4/zephyr-7b-beta",
+        task="conversational",
+        temperature=0.3,
+        max_new_tokens=256,
+        huggingfacehub_api_token=HF_TOKEN
+    )
 )
 
 def generate_insight(user_profile, card_row):
@@ -50,7 +141,8 @@ def generate_insight(user_profile, card_row):
     Explain why this card is a good fit for the user in 2-3 sentences. 
     Highlight specific benefits that match the user's needs and estimate potential savings.
     """
-    return llm.invoke(prompt)
+    response = chat_llm.invoke([HumanMessage(content=prompt)])
+    return response.content if hasattr(response, "content") else response
 
 st.title("💳 Smart Credit Card Advisor")
 st.caption("Get personalized credit card recommendations based on your spending habits and preferences")
