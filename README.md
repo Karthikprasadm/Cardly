@@ -13,16 +13,15 @@ The system uses a hybrid embedding approach (text + numeric features) to find th
 
 ---
 
-## Features
+## Features at a Glance
 
-- Personalized credit card recommendations based on user input
-- Hybrid embeddings combining card descriptions and numeric features
-- LLM-powered explanations for each recommended card
-- Interactive Streamlit UI for easy user interaction
-- Deployed on Streamlit Cloud with Hugging Face integration
-- Transaction upload (CSV/OFX) to auto-build spend profiles with seasonal weighting
-- Card comparison board to pin up to three cards and review them side-by-side
-- Net annual value projection with what-if travel scenarios
+- **AI-assisted matching** – text + numeric embeddings pick the best cards for the user’s narrative and financial constraints.
+- **LLM explanations** – every recommendation includes a short “Why this card?” summary generated with the Zephyr-7B model.
+- **Statement-driven spend modeling** – upload CSV/OFX files to auto-categorize 3–6 months of spend and detect seasonal spikes; sliders stay available as a fallback.
+- **Scenario planner** – flip a toggle to simulate travel-heavy months and see how the ranking changes.
+- **Net annual value analytics** – projected rewards minus fees are displayed per card and as a bar chart so users instantly see the best ROI.
+- **Pin & compare** – select up to three cards, then view their fees, rewards, perks, and insights side-by-side.
+- **Ready for deployment** – light Streamlit frontend, Hugging Face backend, simple `.env` configuration.
 
 ---
 
@@ -54,15 +53,21 @@ creditCardRecommendationSystem/
 </div>
 ---
 
-## Quick Setup
+## Quick Start (Detailed)
 
-1. **Clone the repository**
+1. **Check prerequisites**
+   - Python 3.10 (tested on 3.10.11)
+   - `pip` and `git`
+   - Hugging Face account + access token (fine-grained, read scope is enough)
+   - Optional: CSV/OFX statements for upload
+
+2. **Clone the repository**
    ```bash
    git clone https://github.com/Karthikprasadm/Cardly.git
    cd Cardly
    ```
 
-2. **(Recommended) Create and activate a virtual environment**
+3. **Create and activate a virtual environment (recommended)**
    ```bash
    python -m venv .venv
    # Windows
@@ -70,89 +75,93 @@ creditCardRecommendationSystem/
    # macOS/Linux
    source .venv/bin/activate
    ```
+   Your shell prompt should now include `(.venv)`.
 
-3. **Install dependencies**
+4. **Install dependencies**
    ```bash
+   pip install --upgrade pip
    pip install -r requirements.txt
    ```
 
-4. **Configure secrets**
-   - Create a `.env` file (not committed to git) containing:
+5. **Configure environment variables**
+   - Create a `.env` file in the project root:
      ```
-     HF_TOKEN=your_huggingface_token_here
+     HF_TOKEN=hf_your_token_here
      ```
-   - Never push the `.env` file or your token/credentials to GitHub. Use `git status` to verify it’s untracked.
+   - Keep `.env` out of version control (`.gitignore` is already configured).
 
-5. **Run the Streamlit app**
+6. **Launch the app**
    ```bash
    streamlit run app.py
    ```
+   Streamlit prints a local URL (default `http://localhost:8501`). Open it in a browser.
 
-6. **Open** `http://localhost:8501` **and start exploring recommendations.**
-
-For a detailed walkthrough (including screenshots, troubleshooting tips, and how to interpret the outputs) see [`how_to_run&use.md`](how_to_run&use.md).
-
----
-
-## Usage
-
-- Enter your financial profile and preferences in the UI.
-- Get personalized credit card recommendations with detailed explanations.
-- Upload recent statements to let Cardly auto-categorize your spending (the sliders become fallbacks).
-- Pin recommended cards to compare annual fees, rewards, and perks.
-- Use the “What-if scenario” toggle to simulate travel-heavy months and review the net annual value bar chart to see how each card stacks up.
+Need screenshots and step-by-step guidance? Check the companion guide: [`how_to_run&use.md`](how_to_run&use.md).
 
 ---
 
-## How It Works
+## UI Walkthrough
 
-- **Data Layer:** Contains cleaned credit card data and precomputed embeddings.
-- **Embedding Models:** Sentence Transformer model for text embeddings and scaler for numeric features.
-- **Recommendation Engine:** Combines text and numeric embeddings to find best matches.
-- **LLM Integration:** Uses Hugging Face Zephyr-7B-Beta model for personalized insights.
-- **Frontend:** Streamlit app for user interaction.
-
----
-
-## Data Processing
-
-- Extracted credit card data from PDF using pdfplumber.
-- Parsed and cleaned data with regex to handle various formats.
-- Converted monetary values (lakh, crore) to numeric.
-- Saved cleaned data as CSV for model training.
+1. **Authentication panel** – instantly shows whether the Hugging Face token was detected.
+2. **Upload Spend Data** – drag & drop CSV/OFX statements. Cardly auto-maps columns, filters expenses, averages the last 3–6 months, and flags seasonal peaks. If no file is uploaded, the manual sliders stay in control.
+3. **Preferences & sliders** – set monthly income, category-level spend, preferred perks, and fee thresholds.
+4. **Scenario toggle** – simulate a travel bump (or any multiplier you choose) before running the recommender.
+5. **Run search** – hit “Find My Best Cards.” A hybrid embedding compares your profile with the stored embeddings and surfaces the top five matches.
+6. **Results section**
+   - Each expander shows fees, interest rate, rewards, key features, estimated annual rewards, and the net value (rewards minus fees).
+   - Zephyr-7B generates a short “Why this card?” explanation using your profile and scenario context.
+   - Pin cards with the 📌 button; pinned cards appear in the comparison table below.
+7. **Net value chart & comparison board** – visualize the ranking via a bar chart, then inspect pinned cards side-by-side.
 
 ---
 
-## Model Training and Embeddings
+## How It Works (Under the Hood)
 
-- Used 'all-MiniLM-L6-v2' sentence transformer for text embeddings.
-- Normalized numeric features with MinMaxScaler.
-- Combined text and numeric embeddings into hybrid vectors.
-- Saved embeddings and models for inference.
-
----
-
-## Recommendation Logic
-
-- User inputs text preferences and numeric constraints.
-- User input is embedded and normalized.
-- Cosine similarity is computed against card embeddings.
-- Top 5 cards are selected and passed to LLM for explanation.
+| Layer | Description |
+| --- | --- |
+| Data layer | `model/credit_card_data_final.csv` holds curated card features. Additional artifacts (`.joblib`, `.npy`) store the embedder, scaler, and precomputed hybrids. |
+| Embeddings | Text features use `all-MiniLM-L6-v2`; numeric features are normalized via `MinMaxScaler`. The resulting hybrid vector sits in `credit_card_hybrid_embeddings.npy`. |
+| Spend modeling | Uploads are parsed with pandas/`ofxparse`, categorized via keyword mapping, and averaged across months. Seasonal spikes are noted for LLM context. |
+| Recommendation engine | User text + numeric preferences are embedded, then cosine similarity locates the five best cards. |
+| LLM integration | LangChain’s `ChatHuggingFace` wrapper calls Zephyr-7B-Beta to explain the match. |
+| Frontend | Streamlit surfaces the whole experience with session-state persistence so pinning/comparison feels native. |
 
 ---
 
-## Deployment
+## Data Processing Highlights
 
-- Deployed on Streamlit Cloud with Hugging Face integration.
-- Hugging Face API token managed securely via environment variables.
+1. Source PDF (`sodapdf-converted.pdf`) extracted with `pdfplumber`.
+2. Regex-based parsing normalized monetary units (lakhs/crores) and flattened multi-line descriptions.
+3. Cleaned data saved to `credit_card_data_cleaned.csv`, then curated columns exported to `credit_card_data_final.csv`.
+4. Embeddings computed once and stored under `model/` so local inference stays fast.
 
 ---
 
-## Future Work
+## Recommendation Logic Recap
 
-- Add more cards and update dataset regularly.
-- Improve LLM prompts for better explanations.
-- Add user authentication and history tracking.
+1. Build user vector  
+   `user_text = narrative + preferred features + scenario summary`  
+   `user_numeric = [joining_fee, annual_fee, eligibility, reward_rate, interest_rate]`
+2. Encode text, scale numerics, and concatenate.
+3. Replace NaNs, compare against stored card vectors via cosine similarity.
+4. Sort scores, select top 5, compute projected rewards & net annual value.
+5. Generate Zephyr insights and render the UI (metrics, chart, comparison board).
+
+---
+
+## Deployment Notes
+
+- Works locally, on Streamlit Community Cloud, or any VM. Just set `HF_TOKEN` as an environment variable.
+- If you rehost elsewhere, copy the `model/` directory or regenerate embeddings.
+
+---
+
+## Future Ideas
+
+- Multi-user profiles and saved histories
+- Rewards projections that factor welcome bonuses or fuel surcharge waivers
+- Automated dataset refresh pipeline + GitHub Actions
+- Integrations with Plaid/SaltEdge for live transaction pulls
 
 ---
 
@@ -170,6 +179,6 @@ This project is licensed under the MIT License.
 
 ## Contact
 
-For questions or contributions, please open an issue or pull request on the [GitHub repository](https://github.com/alpha2lucifer/creditCardRecommendationSystem).
+Open an issue or pull request on [GitHub](https://github.com/Karthikprasadm/Cardly) if you’d like to collaborate, report a bug, or request a feature.
 
 ---

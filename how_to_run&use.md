@@ -21,7 +21,7 @@ git clone https://github.com/Karthikprasadm/Cardly.git
 cd Cardly
 ```
 
-> Tip: The repo contains a pre-trained embedder (~87 MB). Make sure you have a stable connection for the initial clone.
+> Tip: the repo includes a pre-trained embedder (~87 MB). Let the download finish; it only happens once.
 
 ---
 
@@ -54,7 +54,7 @@ This pulls in Streamlit, scikit-learn, sentence-transformers, Hugging Face clien
 
 ## 5. Configure Secrets (.env)
 
-1. Create a Hugging Face access token (https://huggingface.co/settings/tokens). “Fine grained” tokens with at least **read** scope work best.
+1. Create a Hugging Face access token (https://huggingface.co/settings/tokens). Fine-grained tokens with at least **read** scope work best.
 2. Create a `.env` file in the project root (same folder as `app.py`):
    ```
    HF_TOKEN=hf_xxx_your_secret_token
@@ -76,29 +76,46 @@ streamlit run app.py
 
 ## 7. Using the UI
 
-1. **Authentication panel (sidebar)**  
-   - Shows whether your Hugging Face token was detected.  
-   - If you see a warning, double-check the `.env` file or restart the session.
+1. **Authentication (sidebar)**  
+   - Immediate status of `HF_TOKEN`. Red warning = fix `.env` or restart.
 
-2. **Upload or Declare Spend**  
-   - Use the **“Upload Spend Data”** panel to drop in CSV/OFX statements. Cardly auto-detects dates, merchants, amounts, and categories, then computes a 3–6 month rolling average plus seasonal spikes.  
-   - When no file is uploaded, the original sliders remain active. The UI clearly states which source is currently powering the profile.
+2. **Upload Spend Data** *(optional but powerful)*  
+   - Accepts CSV or OFX. Cardly looks for three fields:
+     | Needed data | Sample headers |
+     | --- | --- |
+     | Transaction date | `Date`, `Txn Date`, `Post Date`, `Value Date` |
+     | Narrative / merchant | `Description`, `Narration`, `Merchant`, `Details` |
+     | Amount | `Amount`, `Debit`, `Txn Amount`, `Value` |
+   - Expenses are auto-categorized (dining, groceries, online shopping, travel, fuel, other).  
+   - A 3–6 month window averages the spend, and seasonal spikes are noted.  
+   - If nothing is uploaded, the original sliders remain the source of truth (“manual sliders” label appears).
 
-3. **User Query Box**  
-   - Describe your goals in natural language (“I travel twice a year, want lounge access, avoid high annual fees”).
+3. **Preferences & sliders**  
+   - Adjust monthly income, joining/annual fee ceiling, expected reward rate, interest tolerance, and preferred features.  
+   - Sliders mirror the upload-derived values but can be manually tweaked at any time.
 
-4. **Find My Best Cards**  
-   - Click the CTA button; Cardly embeds your text + numeric profile, compares it with the stored embeddings, and ranks the top 5 cards.
+4. **Scenario planner**  
+   - Toggle “simulate travel surge” to stress-test the ranking.  
+   - Choose a multiplier (1–3×) for travel spend—the scenario summary updates instantly and feeds into the embedding.
 
-5. **Results Section**  
-   - Each expander shows issuer, annual fee, interest rate, reward descriptions, key features, and the newly computed **net annual value** based on your spend profile.  
-   - The app calls the Zephyr-7B LLM (via Hugging Face Inference) to craft personalized “Why this card?” insights.
-   - Use the **📌 Pin for comparison** button on any card to send it to the comparison board (max 3 cards). Remove pins or clear the board from the section below the recommendations.
+5. **Describe your needs**  
+   - Use plain language (“Need cashback on groceries, minimal fee, occasional lounge access”).  
+   - This narrative becomes part of the hybrid embedding.
 
-6. **Net Annual Value Chart & Comparison Board**  
-   - After recommendations load you’ll see a bar chart ranking cards by **net annual value (rewards − annual fees)** under the current or simulated scenario.  
-   - The comparison board displays pinned cards side-by-side so you can contrast fees, rewards, interest rates, and key features.
+6. **Run the recommender**  
+   - Click **Find My Best Cards**. Streamlit shows a spinner while embeddings and cosine similarity execute.
 
+7. **Review the recommendations**  
+   - Each expander includes issuer, fees, rates, rewards, key features, estimated annual rewards, and **net annual value**.  
+   - Zephyr-7B generates a succinct “Why this card?” explanation referencing your spend profile + scenario.  
+   - Pin favorite cards with the 📌 button (max three); unpin from the same place.
+
+8. **Analyze**  
+   - A bar chart ranks cards by net annual value (rewards − fees) for the current scenario.  
+   - The comparison board shows pinned cards in a table—perfect for screenshots or stakeholder updates.
+
+9. **Iterate**  
+   - Upload another statement, change the lookback window, or tweak the travel multiplier to answer “what-if” questions on the fly.
 
 ---
 
@@ -109,7 +126,7 @@ streamlit run app.py
 | `ModuleNotFoundError: sentence_transformers.model_card` | Ensure you are using the bundled virtual environment or reinstall `sentence-transformers==2.2.2`. The app also includes backward-compatible shims, so reinstalling dependencies (`pip install -r requirements.txt`) usually resolves it. |
 | `ValueError: Model ... not supported for task text-generation` | The app already configures the Zephyr endpoint with `task="conversational"`. If you change models/tasks, verify they support text generation in the Hugging Face docs. |
 | HTTP 401 from Hugging Face | Token missing or invalid. Regenerate on the Hugging Face dashboard and update `.env`. Restart the Streamlit session after changes. |
-| Warning about `credit_card_embedder.joblib` size when pushing to GitHub | Track the file with Git LFS or host it externally before sharing the repo publicly. |
+| Warning about `credit_card_embedder.joblib` size when pushing to GitHub | The artifact is ~87 MB. Use Git LFS or host the model elsewhere before publishing the repo. |
 
 If you hit an issue not covered above, capture the terminal stack trace and open an issue in the repo.
 
@@ -117,9 +134,10 @@ If you hit an issue not covered above, capture the terminal stack trace and open
 
 ## 9. Next Steps
 
-- Customize the dataset (`model/credit_card_data_final.csv`) with new cards.  
-- Fine-tune the prompts inside `generate_insight()` to change the voice or format of recommendations.  
-- Deploy to Streamlit Cloud or Hugging Face Spaces by setting environment variables (`HF_TOKEN`) in the hosting platform.
+- **Add new cards** – edit `model/credit_card_data_final.csv`, rerun embedding generation, and redeploy.  
+- **Adjust messaging** – tweak `generate_insight()` to change tone, add CTAs, or experiment with longer LLM responses.  
+- **Deploy** – Streamlit Cloud, Hugging Face Spaces, or any VM works; just set `HF_TOKEN` as an environment variable.  
+- **Automate** – consider GitHub Actions for linting/tests and for refreshing embeddings when data changes.
 
 Enjoy building with Cardly! 🎉
 
