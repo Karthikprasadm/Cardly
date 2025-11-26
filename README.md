@@ -28,7 +28,7 @@ The system uses a hybrid embedding approach (text + numeric features) to find th
 ## Project Structure
 
 ```
-creditCardRecommendationSystem/
+Cardly/
  ┣ model/
  ┃ ┣ credit_card_data_cleaned.csv
  ┃ ┣ credit_card_data_final.csv
@@ -46,7 +46,7 @@ creditCardRecommendationSystem/
 ## Live Demo & Repository
 
 - **Video link:** [https://vimeo.com/1094748093/63f14e9da2?share=copy](https://vimeo.com/1094748093/63f14e9da2?share=copy)
-- **Live App:** [https://creditcardrecommendationsystem-project.streamlit.app/](https://creditcardrecommendationsystem-project.streamlit.app/)
+- **Live App:** [Cardly on Streamlit](https://creditcardrecommendationsystem-project.streamlit.app/)
 - **GitHub (current repo):** [https://github.com/Karthikprasadm/Cardly](https://github.com/Karthikprasadm/Cardly)
 <div align="center">
   <img src="Untitled video - Made with Clipchamp (7).gif" height="500" />

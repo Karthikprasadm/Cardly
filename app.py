@@ -51,8 +51,13 @@ if "sentence_transformers.model_card" not in sys.modules:
         def to_json(self):
             return dict(self)
 
+    def generate_model_card(*_, **__):
+        """Compatibility shim for newer sentence-transformers."""
+        return {}
+
     model_card_module.SentenceTransformerModelCardData = SentenceTransformerModelCardData
     model_card_module.SentenceTransformerModelCard = SentenceTransformerModelCard
+    model_card_module.generate_model_card = generate_model_card
     sys.modules["sentence_transformers.model_card"] = model_card_module
 
 from sentence_transformers import SentenceTransformer
@@ -350,7 +355,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 os.environ['STREAMLIT_SERVER_FILE_WATCHER_TYPE'] = 'none'
 st.set_page_config(
-    page_title="Smart Credit Card Advisor",
+    page_title="Cardly – Smart Credit Card Advisor",
     page_icon="💳",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -444,8 +449,8 @@ def generate_insight(user_profile, card_row):
     response = chat_llm.invoke([HumanMessage(content=prompt)])
     return response.content if hasattr(response, "content") else response
 
-st.title("💳 Smart Credit Card Advisor")
-st.caption("Get personalized credit card recommendations based on your spending habits and preferences")
+st.title("💳 Cardly")
+st.caption("Smart credit card advisor for personalized recommendations based on your spending habits and preferences")
 
 with st.sidebar:
     st.subheader("🔑 Authentication")

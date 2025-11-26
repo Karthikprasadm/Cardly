@@ -1,6 +1,6 @@
 # How to Run & Use Cardly
 
-This guide walks through everything you need to run the Smart Credit Card Advisor locally and get the most out of the UI.
+This guide walks through everything you need to run Cardly (the Smart Credit Card Advisor) locally and get the most out of the UI.
 
 ---
 
