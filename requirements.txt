@@ -8,3 +8,4 @@ langchain-huggingface
 python-dotenv
 pdfplumber
 ofxparse
+fpdf2

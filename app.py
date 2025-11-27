@@ -2,6 +2,8 @@ import os
 import sys
 import types
 import io
+import json
+import base64
 import calendar
 from datetime import datetime
 from collections import defaultdict
@@ -18,6 +20,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_core.messages import HumanMessage
 from dotenv import load_dotenv
+from fpdf import FPDF, HTMLMixin
 
 try:
     from ofxparse import OfxParser
@@ -79,6 +82,336 @@ DISPLAY_SPEND_CATEGORIES = [
 ]
 
 MAX_PINNED_CARDS = 3
+
+LANGUAGE_STRINGS = {
+    "English": {
+        "app_title": "Cardly",
+        "app_subtitle": "Smart credit card advisor for personalized recommendations based on your spending habits and preferences",
+        "experience_settings": "🛠 Experience settings",
+        "language": "Language",
+        "currency": "Currency",
+        "contrast": "High contrast mode",
+        "scenario_header": "🧪 Scenario planner",
+        "scenario_caption": "Stack multiple what-if scenarios and use sliders to stress-test your recommendations.",
+        "scenario_none": "standard",
+        "scenario_active": "Active scenarios",
+        "break_even": "Break-even spend",
+        "upload_section": "📂 Upload Spend Data (optional)",
+        "preferences_section": "⚙️ Your Preferences",
+        "spend_section": "💰 Monthly Spending",
+        "features_section": "⭐ Preferred Features",
+        "finance_section": "⚖️ Financial Preferences",
+        "language_hint": "Choose your preferred UI language",
+        "currency_hint": "Select the currency for displaying values",
+        "auth_section": "🔑 Authentication",
+        "search_button": "🔍 Find My Best Cards",
+    },
+    "हिन्दी": {
+        "app_title": "Cardly",
+        "app_subtitle": "आपकी खर्च करने की आदतों पर आधारित स्मार्ट क्रेडिट कार्ड सलाहकार",
+        "experience_settings": "🛠 अनुभव सेटिंग्स",
+        "language": "भाषा",
+        "currency": "मुद्रा",
+        "contrast": "उच्च कंट्रास्ट मोड",
+        "scenario_header": "🧪 परिदृश्य योजना",
+        "scenario_caption": "एक से अधिक परिदृश्यों को आज़माएँ और स्लाइडर से परिणाम देखें।",
+        "scenario_none": "मानक",
+        "scenario_active": "सक्रिय परिदृश्य",
+        "break_even": "ब्रेक-ईवन खर्च",
+        "upload_section": "📂 खर्च डेटा अपलोड करें (वैकल्पिक)",
+        "preferences_section": "⚙️ आपकी प्राथमिकताएँ",
+        "spend_section": "💰 मासिक खर्च",
+        "features_section": "⭐ पसंदीदा सुविधाएँ",
+        "finance_section": "⚖️ वित्तीय प्राथमिकताएँ",
+        "language_hint": "अपनी पसंदीदा भाषा चुनें",
+        "currency_hint": "मुद्रा चुनें जिसमें मान दिखाए जाएँ",
+        "auth_section": "🔑 प्रमाणीकरण",
+        "search_button": "🔍 मेरे लिए सर्वश्रेष्ठ कार्ड खोजें",
+    },
+}
+
+CURRENCY_CONFIG = {
+    "INR": {"symbol": "₹", "rate_to_inr": 1.0},
+    "USD": {"symbol": "$", "rate_to_inr": 83.0},
+    "EUR": {"symbol": "€", "rate_to_inr": 90.0},
+}
+
+SCENARIO_CONFIGS = [
+    {
+        "key": "travel_surge",
+        "label": "Travel surge",
+        "description": "Simulate a travel-heavy period by multiplying your travel budget.",
+        "adjustments": [
+            {
+                "category": "travel",
+                "type": "multiplier",
+                "label": "Travel multiplier",
+                "min": 1.0,
+                "max": 3.0,
+                "default": 2.0,
+                "step": 0.1,
+            }
+        ],
+    },
+    {
+        "key": "festive_shopping",
+        "label": "Festive shopping month",
+        "description": "Boost online shopping and grocery spends for seasonal spikes.",
+        "adjustments": [
+            {
+                "category": "online_shopping",
+                "type": "multiplier",
+                "label": "Online shopping multiplier",
+                "min": 1.0,
+                "max": 4.0,
+                "default": 2.0,
+                "step": 0.1,
+            },
+            {
+                "category": "groceries",
+                "type": "multiplier",
+                "label": "Groceries multiplier",
+                "min": 1.0,
+                "max": 3.0,
+                "default": 1.5,
+                "step": 0.1,
+            },
+        ],
+    },
+    {
+        "key": "fuel_spike",
+        "label": "Fuel price increase",
+        "description": "Account for higher fuel prices or longer commutes.",
+        "adjustments": [
+            {
+                "category": "fuel",
+                "type": "multiplier",
+                "label": "Fuel multiplier",
+                "min": 1.0,
+                "max": 2.5,
+                "default": 1.5,
+                "step": 0.1,
+            }
+        ],
+    },
+    {
+        "key": "new_subscription",
+        "label": "New subscription",
+        "description": "Add a new recurring subscription to your online spending.",
+        "adjustments": [
+            {
+                "category": "online_shopping",
+                "type": "addition",
+                "label": "Monthly subscription amount",
+                "min_inr": 0,
+                "max_inr": 5000,
+                "default_inr": 1500,
+                "step_inr": 250,
+            }
+        ],
+    },
+]
+
+SCENARIO_LABEL_LOOKUP = {cfg["key"]: cfg["label"] for cfg in SCENARIO_CONFIGS}
+
+CARD_THEME_KEYWORDS = {
+    "travel": ["travel", "flight", "airline", "lounge", "hotel", "miles", "vistara", "airport"],
+    "fuel": ["fuel", "petrol", "diesel", "bpcl", "hpcl", "iocl", "fuel surcharge"],
+    "cashback": ["cashback", "cash back", "cash-back", "cash back", "5%", "reward points"],
+    "premium": ["premium", "luxury", "black", "infinia", "reserve", "metal", "infinite"],
+    "online": ["online", "ecommerce", "amazon", "flipkart", "myntra", "swiggy", "instamart"],
+    "groceries": ["grocery", "groceries", "supermarket", "daily needs", "departmental"],
+}
+
+PORTFOLIO_BUNDLES = [
+    {
+        "name": "Travel + Fuel Saver",
+        "description": "Pair a travel-focused card with a fuel optimizer to cover commutes and getaways.",
+        "themes": ["travel", "fuel"],
+    },
+    {
+        "name": "Premium Lifestyle Duo",
+        "description": "Mix a premium/luxury card with a cashback daily spender to balance perks and value.",
+        "themes": ["premium", "cashback"],
+    },
+    {
+        "name": "E-commerce + Essentials",
+        "description": "Blend an online-shopping specialist with a groceries/dining card for daily life.",
+        "themes": ["online", "groceries"],
+    },
+]
+
+
+def translate_text(language: str, key: str) -> str:
+    fallback = LANGUAGE_STRINGS["English"]
+    lang_pack = LANGUAGE_STRINGS.get(language, fallback)
+    return lang_pack.get(key, fallback.get(key, key))
+
+
+def convert_from_inr(amount_in_inr: float, currency: str) -> float:
+    rate = CURRENCY_CONFIG.get(currency, CURRENCY_CONFIG["INR"])["rate_to_inr"]
+    return amount_in_inr / rate if rate else amount_in_inr
+
+
+def convert_to_inr(amount: float, currency: str) -> float:
+    rate = CURRENCY_CONFIG.get(currency, CURRENCY_CONFIG["INR"])["rate_to_inr"]
+    return amount * rate
+
+
+def format_currency(amount_in_inr: float, currency: str, decimals: int = 0) -> str:
+    config = CURRENCY_CONFIG.get(currency, CURRENCY_CONFIG["INR"])
+    if amount_in_inr is None:
+        return f"{config['symbol']}0"
+    converted = convert_from_inr(amount_in_inr, currency)
+    return f"{config['symbol']}{converted:,.{decimals}f}"
+
+
+def get_category_label(slug: str) -> str:
+    return dict(DISPLAY_SPEND_CATEGORIES).get(slug, slug.replace("_", " ").title())
+
+
+def currency_number_input(
+    label: str,
+    value_in_inr: float,
+    step_in_inr: float,
+    currency: str,
+    min_in_inr: float = 0,
+    help_text: str | None = None,
+):
+    min_display = int(convert_from_inr(min_in_inr, currency))
+    value_display = int(convert_from_inr(value_in_inr, currency))
+    step_display = max(1, int(convert_from_inr(step_in_inr, currency)))
+    display_value = st.number_input(
+        label,
+        min_value=min_display,
+        value=value_display,
+        step=step_display,
+        help=help_text,
+    )
+    return float(convert_to_inr(display_value, currency))
+
+
+def currency_slider(
+    label: str,
+    min_in_inr: float,
+    max_in_inr: float,
+    default_in_inr: float,
+    step_in_inr: float,
+    currency: str,
+    key: str | None = None,
+):
+    min_display = int(convert_from_inr(min_in_inr, currency))
+    max_display = int(convert_from_inr(max_in_inr, currency))
+    default_display = int(convert_from_inr(default_in_inr, currency))
+    step_display = max(1, int(convert_from_inr(step_in_inr, currency)))
+    selected_display = st.slider(
+        label,
+        min_value=min_display,
+        max_value=max_display,
+        value=default_display,
+        step=step_display,
+        key=key,
+    )
+    return float(convert_to_inr(selected_display, currency))
+
+
+def infer_card_themes(card_row: dict) -> set[str]:
+    text_parts = [
+        card_row.get("Card Name", ""),
+        card_row.get("Reward Description", ""),
+        card_row.get("Key Features", ""),
+    ]
+    normalized = " ".join(str(part) for part in text_parts if part).lower()
+    matched = set()
+    for theme, keywords in CARD_THEME_KEYWORDS.items():
+        if any(keyword in normalized for keyword in keywords):
+            matched.add(theme)
+    return matched or {"general"}
+
+
+def build_portfolio_bundles(cards: list[dict], net_rows: list[dict], net_value_label: str, currency_symbol: str):
+    card_theme_map = {}
+    net_value_lookup = {}
+    for card, net in zip(cards, net_rows):
+        card_theme_map[card["Card Name"]] = infer_card_themes(card)
+        net_value_lookup[card["Card Name"]] = net
+
+    bundles_output = []
+    for bundle in PORTFOLIO_BUNDLES:
+        selected_cards = []
+        used_names = set()
+        for theme in bundle["themes"]:
+            candidate = next(
+                (
+                    card
+                    for card in cards
+                    if theme in card_theme_map.get(card["Card Name"], set()) and card["Card Name"] not in used_names
+                ),
+                None,
+            )
+            if not candidate:
+                break
+            selected_cards.append(candidate)
+            used_names.add(candidate["Card Name"])
+        if len(selected_cards) == len(bundle["themes"]):
+            coverage = ", ".join(sorted({theme for card in selected_cards for theme in card_theme_map[card["Card Name"]]}))
+            total_net = sum(
+                net_value_lookup.get(card["Card Name"], {}).get(net_value_label, 0)
+                for card in selected_cards
+            )
+            bundles_output.append(
+                {
+                    "name": bundle["name"],
+                    "description": bundle["description"],
+                    "cards": selected_cards,
+                    "coverage": coverage,
+                    "total_net_value": total_net,
+                    "currency_symbol": currency_symbol,
+                }
+            )
+    return bundles_output
+
+
+class TablePDF(FPDF, HTMLMixin):
+    pass
+
+
+def dataframe_to_pdf_bytes(df: pd.DataFrame) -> bytes:
+    pdf = TablePDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, "Cardly Comparison", ln=True)
+    pdf.ln(4)
+    pdf.set_font("Arial", size=10)
+
+    table_html = df.to_html(index=False, escape=True)
+    table_html = table_html.replace(
+        '<table border="1" class="dataframe">',
+        '<table border="1" width="100%" cellspacing="0" cellpadding="4">',
+    )
+    pdf.write_html(table_html)
+    output = pdf.output(dest="S")
+    if isinstance(output, bytes):
+        return output
+    if isinstance(output, bytearray):
+        return bytes(output)
+    return str(output).encode("latin-1")
+
+
+def serialize_comparison_state(df: pd.DataFrame) -> str:
+    payload = df.to_dict(orient="records")
+    raw = json.dumps(payload).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("utf-8")
+
+
+def load_comparison_from_code(code: str) -> pd.DataFrame | None:
+    try:
+        raw = base64.urlsafe_b64decode(code.encode("utf-8"))
+        data = json.loads(raw.decode("utf-8"))
+        return pd.DataFrame(data)
+    except Exception:
+        return None
 
 
 def ensure_session_defaults() -> None:
@@ -221,11 +554,11 @@ def build_spend_profile(df: pd.DataFrame, months_window: int = 6):
     return profile_values, summary_df, seasonal_summary
 
 
-def format_spend_profile_text(profile: dict[str, float]) -> str:
+def format_spend_profile_text(profile: dict[str, float], currency: str) -> str:
     parts = []
     for slug, label in DISPLAY_SPEND_CATEGORIES:
         value = profile.get(slug, 0.0)
-        parts.append(f"{label}: ₹{value:,.0f}")
+        parts.append(f"{label}: {format_currency(value, currency)}")
     return ", ".join(parts)
 
 
@@ -281,6 +614,25 @@ def render_comparison_section():
     ]
     comp_df = pd.DataFrame(pins)[comparison_columns]
     st.dataframe(comp_df, use_container_width=True)
+    csv_bytes = comp_df.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Download comparison (CSV)", csv_bytes, file_name="cardly-comparison.csv", use_container_width=True)
+    try:
+        pdf_bytes = dataframe_to_pdf_bytes(comp_df)
+        st.download_button(
+            "⬇️ Download comparison (PDF)",
+            data=pdf_bytes,
+            file_name="cardly-comparison.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    except Exception as exc:  # pragma: no cover
+        st.warning(f"Unable to generate PDF export: {exc}")
+    share_code = serialize_comparison_state(comp_df)
+    st.text_area(
+        "Share this code with advisors (paste into Cardly to preload pins)",
+        share_code,
+        height=80,
+    )
     if st.button("Clear comparison board"):
         st.session_state["pinned_cards"] = []
 
@@ -294,6 +646,13 @@ def render_recommendations(payload: dict):
     cards_df = pd.DataFrame(cards)
     spend_source = payload.get("spend_profile_source", "your inputs")
     scenario_desc = payload.get("scenario_label", "standard")
+    currency = payload.get("currency", "INR")
+    language = payload.get("language", "English")
+    currency_symbol = CURRENCY_CONFIG.get(currency, CURRENCY_CONFIG["INR"])["symbol"]
+    net_value_label = payload.get("net_value_label", f"Net Annual Value ({currency_symbol})")
+    rewards_label = payload.get("rewards_label", f"Estimated Annual Rewards ({currency_symbol})")
+    horizon_label = payload.get("horizon_label", f"{payload.get('time_horizon_months', 12)}-month Value ({currency_symbol})")
+    time_horizon_months = payload.get("time_horizon_months", 12)
     st.subheader("🌟 Top Recommendations For You")
     st.info(f"Based on your {spend_source} – {scenario_desc} scenario – and selected preferences", icon="ℹ️")
 
@@ -302,10 +661,29 @@ def render_recommendations(payload: dict):
         with st.expander(f"#{i+1}: {row['Card Name']} ({row['Issuer']})", expanded=True):
             col1, col2 = st.columns([1, 3])
             with col1:
-                st.metric("Annual Fee", f"₹{row['Annual Fee']}")
+                annual_fee_value = float(row.get("Annual Fee") or 0.0)
+                st.metric("Annual Fee", format_currency(annual_fee_value, currency))
                 st.metric("Interest Rate", f"{row['Interest Rate (p.m.)']}% p.m.")
-                st.metric("Net Annual Value", f"₹{row.get('Net Annual Value (₹)', 0):,.0f}")
-                st.metric("Est. Rewards", f"₹{row.get('Estimated Annual Rewards (₹)', 0):,.0f}")
+                st.metric(
+                    net_value_label,
+                    format_currency(row.get("Net Annual Value (₹)", 0.0), currency),
+                )
+                st.metric(
+                    rewards_label,
+                    format_currency(row.get("Estimated Annual Rewards (₹)", 0.0), currency),
+                )
+                st.metric(
+                    horizon_label,
+                    format_currency(row.get("Projected Horizon Value (₹)", 0.0), currency),
+                )
+                reward_rate_card = float(row.get("Reward Rate (%)") or 0.0)
+                break_even_spend = None
+                if reward_rate_card > 0:
+                    break_even_spend = annual_fee_value / (reward_rate_card / 100.0)
+                st.metric(
+                    translate_text(language, "break_even"),
+                    format_currency(break_even_spend, currency) if break_even_spend is not None else "N/A",
+                )
             with col2:
                 st.write(f"**Rewards:** {row.get('Reward Description', '')}")
                 st.write(f"**Key Features:** {row['Key Features']}")
@@ -334,17 +712,37 @@ def render_recommendations(payload: dict):
     if net_rows:
         st.subheader("💰 Net Annual Value Projection")
         net_df = pd.DataFrame(net_rows)
+        st.caption("Calculated totals per recommendation (based on your current scenario).")
+        st.dataframe(
+            net_df[["Card", rewards_label, net_value_label, horizon_label]],
+            use_container_width=True,
+            hide_index=True,
+        )
+        x_axis_title = f"Net annual value ({currency_symbol})"
         chart = (
             alt.Chart(net_df)
             .mark_bar()
             .encode(
-                x=alt.X("Net Annual Value (₹):Q", title="Net annual value (₹)"),
+                x=alt.X(f"{net_value_label}:Q", title=x_axis_title),
                 y=alt.Y("Card:N", sort="-x", title="Card"),
-                tooltip=["Card", "Net Annual Value (₹)", "Estimated Annual Rewards (₹)"],
+                tooltip=["Card", net_value_label, rewards_label],
             )
             .properties(height=200)
         )
         st.altair_chart(chart, use_container_width=True)
+        bundles = build_portfolio_bundles(cards, net_rows, net_value_label, currency_symbol)
+        if bundles:
+            st.subheader("🧩 Portfolio Bundles")
+            for bundle in bundles:
+                with st.expander(bundle["name"], expanded=False):
+                    st.caption(bundle["description"])
+                    bundle_cards = pd.DataFrame(bundle["cards"])[["Card Name", "Issuer", "Reward Description"]]
+                    st.dataframe(bundle_cards, hide_index=True, use_container_width=True)
+                    st.markdown(f"**Combined coverage:** {bundle['coverage']}")
+                    st.markdown(
+                        f"**Total projected {time_horizon_months}-month value:** "
+                        f"{bundle['currency_symbol']}{bundle['total_net_value']:,.2f}"
+                    )
 
     render_comparison_section()
 
@@ -449,18 +847,54 @@ def generate_insight(user_profile, card_row):
     response = chat_llm.invoke([HumanMessage(content=prompt)])
     return response.content if hasattr(response, "content") else response
 
-st.title("💳 Cardly")
-st.caption("Smart credit card advisor for personalized recommendations based on your spending habits and preferences")
+language_choice = st.session_state.get("preferred_language", "English")
+currency_choice = st.session_state.get("preferred_currency", "INR")
+high_contrast_pref = st.session_state.get("high_contrast", False)
 
 with st.sidebar:
-    st.subheader("🔑 Authentication")
+    st.subheader(translate_text(language_choice, "experience_settings"))
+    language_options = list(LANGUAGE_STRINGS.keys())
+    language_choice = st.selectbox(
+        translate_text(language_choice, "language"),
+        language_options,
+        index=language_options.index(language_choice),
+        help=translate_text(language_choice, "language_hint"),
+    )
+    st.session_state["preferred_language"] = language_choice
+
+    currency_options = list(CURRENCY_CONFIG.keys())
+    currency_choice = st.selectbox(
+        translate_text(language_choice, "currency"),
+        currency_options,
+        index=currency_options.index(currency_choice),
+        help=translate_text(language_choice, "currency_hint"),
+    )
+    st.session_state["preferred_currency"] = currency_choice
+
+    high_contrast = st.checkbox(
+        translate_text(language_choice, "contrast"),
+        value=high_contrast_pref,
+    )
+    st.session_state["high_contrast"] = high_contrast
+
+    shared_code_input = st.text_input("Paste a shared comparison code")
+    if st.button("Load shared comparison", disabled=not shared_code_input):
+        shared_df = load_comparison_from_code(shared_code_input)
+        if shared_df is not None:
+            st.session_state["pinned_cards"] = shared_df.to_dict(orient="records")
+            st.success("Loaded shared comparison into the board.")
+        else:
+            st.error("Invalid share code. Please verify and try again.")
+
+    st.divider()
+    st.subheader(translate_text(language_choice, "auth_section"))
     if not HF_TOKEN:
         st.warning("Hugging Face token not found. Please set HF_TOKEN in environment variables.")
     else:
         st.success("Hugging Face token loaded successfully")
-    
+
     st.divider()
-    st.subheader("📂 Upload Spend Data (optional)")
+    st.subheader(translate_text(language_choice, "upload_section"))
     months_window = st.slider("Lookback window (months)", min_value=3, max_value=6, value=6, help="Average your transactions over the selected number of months.")
     uploaded_statement = st.file_uploader("Upload CSV or OFX statement", type=["csv", "ofx"], help="Only stored in memory for profiling – never uploaded.")
     if uploaded_statement is not None:
@@ -474,34 +908,122 @@ with st.sidebar:
         if st.button("Clear uploaded data"):
             clear_uploaded_profile()
 
-    st.subheader("⚙️ Your Preferences")
-    monthly_income = st.number_input("Monthly Income (₹)", min_value=10000, value=50000, step=5000)
-    st.caption("Minimum income requirement for most cards: ₹20,000-₹50,000")
-    
-    st.subheader("💰 Monthly Spending")
-    dining = st.slider("Dining & Food Delivery", 0, 30000, 5000)
-    groceries = st.slider("Groceries", 0, 30000, 6000)
-    online_shopping = st.slider("Online Shopping", 0, 50000, 8000)
-    travel = st.slider("Travel", 0, 50000, 3000)
-    fuel = st.slider("Fuel", 0, 20000, 4000)
+    currency_symbol = CURRENCY_CONFIG[currency_choice]["symbol"]
+
+    st.subheader(translate_text(language_choice, "preferences_section"))
+    monthly_income = currency_number_input(
+        f"Monthly Income ({currency_symbol})",
+        value_in_inr=50000,
+        step_in_inr=5000,
+        currency=currency_choice,
+        min_in_inr=10000,
+        help_text="Minimum income requirement for most cards: ₹20,000-₹50,000",
+    )
+
+    st.subheader(translate_text(language_choice, "spend_section"))
+    dining = currency_slider(f"Dining & Food Delivery ({currency_symbol})", 0, 30000, 5000, 500, currency_choice, key="spend_dining")
+    groceries = currency_slider(f"Groceries ({currency_symbol})", 0, 30000, 6000, 500, currency_choice, key="spend_groceries")
+    online_shopping = currency_slider(f"Online Shopping ({currency_symbol})", 0, 50000, 8000, 500, currency_choice, key="spend_online")
+    travel = currency_slider(f"Travel ({currency_symbol})", 0, 50000, 3000, 500, currency_choice, key="spend_travel")
+    fuel = currency_slider(f"Fuel ({currency_symbol})", 0, 20000, 4000, 250, currency_choice, key="spend_fuel")
     if st.session_state.get("spend_profile_values"):
         st.success("Using spend insights from uploaded statements.")
     else:
         st.caption("Using manual slider values for spend profile.")
-    
-    st.subheader("⭐ Preferred Features")
+
+    st.subheader(translate_text(language_choice, "features_section"))
     preferred_features = st.multiselect(
         "Select features important to you",
-        ["Cashback", "Reward Points", "Lounge Access", "Travel Benefits", 
-         "Fuel Savings", "No Annual Fee", "Movie Offers", "Airport Services"]
+        ["Cashback", "Reward Points", "Lounge Access", "Travel Benefits", "Fuel Savings", "No Annual Fee", "Movie Offers", "Airport Services"],
     )
-    
-    st.subheader("⚖️ Financial Preferences")
-    joining_fee = st.number_input("Max Joining Fee (₹)", value=0)
-    annual_fee = st.number_input("Max Annual Fee (₹)", value=1000)
+
+    st.subheader(translate_text(language_choice, "finance_section"))
+    joining_fee = currency_number_input(f"Max Joining Fee ({currency_symbol})", value_in_inr=0, step_in_inr=500, currency=currency_choice)
+    annual_fee = currency_number_input(f"Max Annual Fee ({currency_symbol})", value_in_inr=1000, step_in_inr=500, currency=currency_choice)
     eligibility = monthly_income
     reward_rate = st.slider("Expected Reward Rate (%)", 0.0, 10.0, 3.0, 0.1)
     interest_rate = st.number_input("Max Interest Rate (% p.m.)", value=3.5)
+
+    st.subheader("📈 Bonus & fee forecasting")
+    time_horizon_months = st.selectbox(
+        "Projection horizon",
+        options=[12, 24, 36],
+        format_func=lambda m: f"{m} months",
+        index=0,
+    )
+    welcome_bonus_inr = currency_number_input(
+        f"Expected welcome bonus ({currency_symbol})",
+        value_in_inr=10000,
+        step_in_inr=1000,
+        currency=currency_choice,
+    )
+    statement_credit_inr = currency_number_input(
+        f"Expected statement credits ({currency_symbol})",
+        value_in_inr=5000,
+        step_in_inr=500,
+        currency=currency_choice,
+    )
+    milestone_reward_inr = currency_number_input(
+        f"Milestone rewards ({currency_symbol})",
+        value_in_inr=3000,
+        step_in_inr=500,
+        currency=currency_choice,
+    )
+    anticipate_fee_waiver = st.checkbox("Expect annual fee waiver after meeting spend threshold?")
+    fee_waiver_threshold_inr = 0.0
+    if anticipate_fee_waiver:
+        fee_waiver_threshold_inr = currency_number_input(
+            f"Annual spend needed for waiver ({currency_symbol})",
+            value_in_inr=240000,
+            step_in_inr=10000,
+            currency=currency_choice,
+            help_text="If your projected annual spend meets this threshold, we treat the annual fee as waived.",
+        )
+
+if st.session_state.get("high_contrast"):
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #0b0c0f;
+            color: #f5f5f5;
+        }
+        .stApp [data-testid="stHeader"] {
+            background: transparent;
+        }
+        .stButton>button {
+            background-color: #f5f5f5;
+            color: #0b0c0f;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.title(f"💳 {translate_text(language_choice, 'app_title')}")
+st.caption(translate_text(language_choice, "app_subtitle"))
+
+with st.expander("🧭 Guided onboarding", expanded=False):
+    steps = [
+        {
+            "label": "Upload statements or set sliders",
+            "done": bool(st.session_state.get("spend_profile_values")),
+            "hint": "Import CSV/OFX files or tune manual spends.",
+        },
+        {
+            "label": "Configure scenarios & preferences",
+            "done": bool(st.session_state.get("scenario_active_flags")),
+            "hint": "Use the new planner and forecasting inputs.",
+        },
+        {
+            "label": "Run recommendations & review results",
+            "done": bool(st.session_state.get("latest_recommendations")),
+            "hint": "Click the search button and explore charts/tables.",
+        },
+    ]
+    for idx, step in enumerate(steps, start=1):
+        status_icon = "✅" if step["done"] else "⬜️"
+        st.markdown(f"{status_icon} **Step {idx}: {step['label']}** — {step['hint']}")
 
 manual_spend_profile = {
     "dining": dining,
@@ -513,24 +1035,62 @@ manual_spend_profile = {
 active_spend_profile = st.session_state.get("spend_profile_values") or manual_spend_profile
 seasonal_summary = st.session_state.get("seasonal_summary") or ""
 spend_profile_source = "uploaded transactions" if st.session_state.get("spend_profile_values") else "manual sliders"
-spend_summary_text = format_spend_profile_text(active_spend_profile)
+spend_summary_text = format_spend_profile_text(active_spend_profile, currency_choice)
 
 st.markdown(f"**Current spend profile ({spend_profile_source})**: {spend_summary_text}")
 if seasonal_summary:
     st.caption(f"Seasonal trends detected: {seasonal_summary}")
 
-st.subheader("🧪 What-if scenario")
-scenario_enabled = st.checkbox("Simulate travel surge (double travel budget)")
-travel_multiplier = st.slider(
-    "Travel multiplier", 1.0, 3.0, 2.0, 0.1, disabled=not scenario_enabled, help="Applied only when the scenario toggle is enabled."
-)
+st.subheader(translate_text(language_choice, "scenario_header"))
+st.caption(translate_text(language_choice, "scenario_caption"))
 scenario_profile = active_spend_profile.copy()
-scenario_label = "standard"
-if scenario_enabled:
-    scenario_profile["travel"] = scenario_profile.get("travel", 0.0) * travel_multiplier
-    scenario_label = f"travel x{travel_multiplier:.1f} scenario"
-scenario_summary_text = format_spend_profile_text(scenario_profile)
+scenario_selection = st.multiselect(
+    "Select scenarios",
+    options=[cfg["key"] for cfg in SCENARIO_CONFIGS],
+    format_func=lambda key: SCENARIO_LABEL_LOOKUP.get(key, key),
+)
+scenario_notes = []
+for cfg in SCENARIO_CONFIGS:
+    if cfg["key"] not in scenario_selection:
+        continue
+    with st.expander(cfg["label"], expanded=False):
+        st.caption(cfg["description"])
+        for adj in cfg["adjustments"]:
+            slider_key = f"{cfg['key']}_{adj['category']}_{adj['label']}"
+            if adj["type"] == "multiplier":
+                slider_value = st.slider(
+                    adj["label"],
+                    min_value=float(adj["min"]),
+                    max_value=float(adj["max"]),
+                    value=float(adj["default"]),
+                    step=float(adj["step"]),
+                    key=slider_key,
+                )
+                scenario_profile[adj["category"]] = scenario_profile.get(adj["category"], 0.0) * slider_value
+                scenario_notes.append(f"{cfg['label']} – {get_category_label(adj['category'])} x{slider_value:.1f}")
+            else:
+                addition_value = currency_slider(
+                    f"{adj['label']} ({currency_symbol})",
+                    adj["min_inr"],
+                    adj["max_inr"],
+                    adj["default_inr"],
+                    adj["step_inr"],
+                    currency_choice,
+                    key=slider_key,
+                )
+                scenario_profile[adj["category"]] = scenario_profile.get(adj["category"], 0.0) + addition_value
+                scenario_notes.append(
+                    f"{cfg['label']} +{format_currency(addition_value, currency_choice)} to {get_category_label(adj['category'])}"
+                )
+
+scenario_label = translate_text(language_choice, "scenario_none")
+if scenario_selection:
+    scenario_label = ", ".join(SCENARIO_LABEL_LOOKUP.get(key, key) for key in scenario_selection)
+scenario_summary_text = format_spend_profile_text(scenario_profile, currency_choice)
+if scenario_notes:
+    st.caption(f"{translate_text(language_choice, 'scenario_active')}: {'; '.join(scenario_notes)}")
 st.caption(f"Scenario profile ({scenario_label}): {scenario_summary_text}")
+st.session_state["scenario_active_flags"] = bool(scenario_selection)
 
 user_query = st.text_area(
     "Describe your credit card needs:",
@@ -541,7 +1101,7 @@ user_query = st.text_area(
 
 latest_payload = st.session_state.get("latest_recommendations")
 
-if st.button("🔍 Find My Best Cards", use_container_width=True):
+if st.button(translate_text(language_choice, "search_button"), use_container_width=True):
     with st.spinner("Analyzing your profile and finding the best cards..."):
         feature_text = ", ".join(preferred_features) if preferred_features else "General rewards"
         scenario_source_desc = f"{spend_profile_source} ({scenario_label})"
@@ -570,6 +1130,10 @@ if st.button("🔍 Find My Best Cards", use_container_width=True):
         annual_spend = sum(scenario_profile.values()) * 12
         cards_records = recommendations.to_dict("records")
         net_rows = []
+        net_value_label = f"Net Annual Value ({currency_symbol})"
+        rewards_label = f"Estimated Annual Rewards ({currency_symbol})"
+        horizon_label = f"{time_horizon_months}-month Value ({currency_symbol})"
+        horizon_years = time_horizon_months / 12.0
         for card in cards_records:
             reward_rate_card = float(card.get("Reward Rate (%)") or 0.0)
             annual_fee_card = float(card.get("Annual Fee") or 0.0)
@@ -577,17 +1141,29 @@ if st.button("🔍 Find My Best Cards", use_container_width=True):
             net_value = est_rewards - annual_fee_card
             card["Estimated Annual Rewards (₹)"] = round(est_rewards, 2)
             card["Net Annual Value (₹)"] = round(net_value, 2)
+            fee_waived = anticipate_fee_waiver and annual_spend >= fee_waiver_threshold_inr
+            effective_fee = 0.0 if fee_waived else annual_fee_card
+            projected_rewards = est_rewards * horizon_years
+            total_value_horizon = (
+                projected_rewards
+                + welcome_bonus_inr
+                + statement_credit_inr
+                + milestone_reward_inr
+                - effective_fee * horizon_years
+            )
+            card["Projected Horizon Value (₹)"] = round(total_value_horizon, 2)
             net_rows.append(
                 {
                     "Card": card["Card Name"],
-                    "Net Annual Value (₹)": round(net_value, 2),
-                    "Estimated Annual Rewards (₹)": round(est_rewards, 2),
+                    rewards_label: round(convert_from_inr(est_rewards, currency_choice), 2),
+                    net_value_label: round(convert_from_inr(net_value, currency_choice), 2),
+                    horizon_label: round(convert_from_inr(total_value_horizon, currency_choice), 2),
                 }
             )
 
         llm_profile = (
-            f"Income: ₹{monthly_income}/month | Spend profile: {scenario_summary_text} "
-            f"({scenario_source_desc}) | Preferred features: {feature_text}"
+            f"Income: {format_currency(monthly_income, currency_choice)}/month | "
+            f"Spend profile: {scenario_summary_text} ({scenario_source_desc}) | Preferred features: {feature_text}"
         )
         if seasonal_summary:
             llm_profile += f" | Seasonal trends: {seasonal_summary}"
@@ -604,6 +1180,12 @@ if st.button("🔍 Find My Best Cards", use_container_width=True):
             "net_value_rows": net_rows,
             "annual_spend": annual_spend,
             "insights": {},
+            "currency": currency_choice,
+            "language": language_choice,
+            "net_value_label": net_value_label,
+            "rewards_label": rewards_label,
+            "horizon_label": horizon_label,
+            "time_horizon_months": time_horizon_months,
         }
         st.session_state["latest_recommendations"] = latest_payload
 
