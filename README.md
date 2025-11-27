@@ -18,9 +18,12 @@ The system uses a hybrid embedding approach (text + numeric features) to find th
 - **AI-assisted matching** – text + numeric embeddings pick the best cards for the user’s narrative and financial constraints.
 - **LLM explanations** – every recommendation includes a short “Why this card?” summary generated with the Zephyr-7B model.
 - **Statement-driven spend modeling** – upload CSV/OFX files to auto-categorize 3–6 months of spend and detect seasonal spikes; sliders stay available as a fallback.
-- **Scenario planner** – flip a toggle to simulate travel-heavy months and see how the ranking changes.
-- **Net annual value analytics** – projected rewards minus fees are displayed per card and as a bar chart so users instantly see the best ROI.
-- **Pin & compare** – select up to three cards, then view their fees, rewards, perks, and insights side-by-side.
+- **Multi-scenario planner** – stack travel surges, festive shopping spikes, fuel-price increases, and new subscriptions; sensitivity sliders let you see how rankings shift in real time.
+- **Bonus & fee forecasting** – choose 12/24/36‑month horizons, add welcome bonuses, statement credits, milestones, and fee waivers to see true projected ROI instead of just steady-state value.
+- **Net annual value analytics** – projected rewards minus fees are displayed per card and as a bar chart so users instantly see the best ROI for the current scenario.
+- **Portfolio bundles** – get curated multi-card bundles (e.g., travel + fuel, premium + cashback) with combined coverage and horizon value.
+- **Pin, compare & export** – select up to three cards, view their fees, rewards, perks, and insights side-by-side, then export the comparison as CSV/PDF or share it via a code.
+- **Localization & accessibility** – language-aware labels (English/हिन्दी to start), multi-currency display (₹/$/€) and a high-contrast theme for better readability.
 - **Ready for deployment** – light Streamlit frontend, Hugging Face backend, simple `.env` configuration.
 
 ---
@@ -103,15 +106,22 @@ Need screenshots and step-by-step guidance? Check the companion guide: [`how_to_
 ## UI Walkthrough
 
 1. **Authentication panel** – instantly shows whether the Hugging Face token was detected.
-2. **Upload Spend Data** – drag & drop CSV/OFX statements. Cardly auto-maps columns, filters expenses, averages the last 3–6 months, and flags seasonal peaks. If no file is uploaded, the manual sliders stay in control.
-3. **Preferences & sliders** – set monthly income, category-level spend, preferred perks, and fee thresholds.
-4. **Scenario toggle** – simulate a travel bump (or any multiplier you choose) before running the recommender.
-5. **Run search** – hit “Find My Best Cards.” A hybrid embedding compares your profile with the stored embeddings and surfaces the top five matches.
-6. **Results section**
+2. **Experience settings** – pick UI language, display currency, and optionally enable a high-contrast theme for accessibility.
+3. **Upload Spend Data** – drag & drop CSV/OFX statements. Cardly auto-maps columns, filters expenses, averages the last 3–6 months, and flags seasonal peaks. If no file is uploaded, the manual sliders stay in control.
+4. **Preferences & sliders** – set monthly income, category-level spend, preferred perks, and fee thresholds (joining/annual fee, interest rate tolerance, expected reward rate).
+5. **Scenario planner** – enable one or more scenarios (travel surge, festive shopping month, fuel spike, new subscription). Each scenario has its own sliders so you can stress‑test the ranking.
+6. **Bonus & fee forecasting** – choose a projection horizon (12/24/36 months), estimate welcome bonuses, statement credits, and milestone rewards, and optionally model annual-fee waivers.
+7. **Describe your needs & run search** – describe what you’re looking for in plain language and hit “Find My Best Cards.” A hybrid embedding compares your profile with the stored embeddings and surfaces the top five matches.
+8. **Results section**
    - Each expander shows fees, interest rate, rewards, key features, estimated annual rewards, and the net value (rewards minus fees).
+   - Horizon projections show your total expected value over the selected time window (including bonuses and fee waivers).
+   - A break-even metric shows how much you need to spend annually for the card to pay for itself.
    - Zephyr-7B generates a short “Why this card?” explanation using your profile and scenario context.
    - Pin cards with the 📌 button; pinned cards appear in the comparison table below.
-7. **Net value chart & comparison board** – visualize the ranking via a bar chart, then inspect pinned cards side-by-side.
+9. **Net value chart, bundles & comparison board**
+   - Visualize the ranking via a bar chart for the current scenario.
+   - Explore curated portfolio bundles and their combined projected value.
+   - Inspect pinned cards side-by-side in a comparison table, download as CSV/PDF, or share via a code that can be pasted into another Cardly session.
 
 ---
 
